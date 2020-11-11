@@ -9,11 +9,6 @@ __pycache__/
 
 Pipfile.lock
 
-model/*.txt
-model/image_generator_model.h5
-
-src_old/*
-
 model/checkpoints/*
 model/*
 
