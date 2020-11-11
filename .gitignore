@@ -14,12 +14,9 @@ model/image_generator_model.h5
 
 src_old/*
 
-model/checkpoints/fine_tune/*
-model/checkpoints/pre_train/*
-model/weights/*
+model/checkpoints/*
+model/*
 
-test_predictions/fine_tune/*/
-test_predictions/pre_train/*/
-test_predictions/model_predictions/*
+test_predictions/*
 
 !**/README.md

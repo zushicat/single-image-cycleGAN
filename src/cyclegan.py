@@ -11,9 +11,9 @@ from data_loader import DataLoader
 import tensorflow as tf
 from tensorflow.keras import backend as K
 
-from tensorflow.keras_contrib.layers.normalization.instancenormalization import InstanceNormalization
+from tensorflow_addons.layers import InstanceNormalization
 from tensorflow.keras.initializers import RandomNormal
-from tensorflow.keras.layers import Add, Concatenate, Conv2D, Conv2DTranspose, Input, LeakyReLU
+from tensorflow.keras.layers import Activation, Add, Concatenate, Conv2D, Conv2DTranspose, Input, LeakyReLU
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
 
@@ -21,65 +21,68 @@ import numpy as np
 from PIL import Image
 
 
-PRETRAINED_GENERATOR_WEIGHTS = "../model/weights/pretrained_generator.h5"
-GENERATOR_MODEL = "../model/image_generator_model.h5"
+GENERATOR_MODEL_A_B = "../model/image_generator_A_B_model.h5"
+GENERATOR_MODEL_B_A = "../model/image_generator_B_A_model.h5"
 
-PRETRAINED_GENERATOR_CHECKPOINT_DIR = "../model/checkpoints/pre_train"
-FINE_TUNE_CHECKPOINT_DIR = "../model/checkpoints/fine_tune"
+CHECKPOINT_DIR = "../model/checkpoints"
 
-#IMG_DIR_VAL_LR = "/Users/karin/programming/data/ortho-images/default_test_images/lr"
-#IMG_DIR_PREDICTED = "../test_predictions"
+IMG_DIR_VAL_A = "/Users/karin/programming/data/image_pairs/horse2zebra/val_A_horse"
+IMG_DIR_VAL_B = "/Users/karin/programming/data/image_pairs/horse2zebra/val_B_zebra"
 
-TRAIN_IMG_SIZE = 256
+IMG_DIR_PREDICTED = "../test_predictions"
+
+TRAIN_IMG_SIZE = 128
 CHANNELS = 3
 
-PERCENT_OF_TRAINING_SET=0.05  # check out actual training set (size) and if everything would fit into memory
+PERCENT_OF_TRAINING_SET=0.2  # check out actual training set (size) and if everything would fit into memory
 
 
 # **************************************
 #
 # **************************************
-# class Utils():
-#     # ***************
-#     # inference
-#     # ***************
-#     def test_predict(self, model, data_loader, lr_dir_path, trained_steps, sub_dir):
-#         pass
-#         # ''' Create prediction example of selected epoch '''
-#         # def create_img_dir(trained_steps):
-#         #     ''' My default test dump '''
-#         #     save_img_dir = f"{IMG_DIR_PREDICTED}/{sub_dir}/{trained_steps}"
-#         #     if not os.path.exists(save_img_dir):
-#         #         os.makedirs(save_img_dir)
-#         #     return save_img_dir
+class Utils():
+    # ***************
+    # inference
+    # ***************
+    def test_predict(self, generator, data_loader, val_img_dir, trained_steps, sub_dir):
+        ''' Create prediction example of selected epoch '''
+        def create_img_dir(trained_steps):
+            ''' My default test dump '''
+            save_img_dir = f"{IMG_DIR_PREDICTED}/{sub_dir}/{trained_steps}"
+            if not os.path.exists(save_img_dir):
+                os.makedirs(save_img_dir)
+            return save_img_dir
         
-#         # def resolve_single_image(lr_file_path):
-#         #     lr_img = data_loader.load_single_image(lr_file_path, size=100)
-#         #     generated_hr = model.generator.predict(lr_img)
-#         #     generated_hr = 0.5 * generated_hr + 0.5
-#         #     return Image.fromarray((np.uint8(generated_hr*255)[0])) 
+        def resolve_single_image(val_img_file_path):
+            val_img = data_loader.load_single_image(val_img_file_path, size=128)
+            generated_img = generator.predict(val_img)
+            generated_img = 0.5 * generated_img + 0.5
+            return Image.fromarray((np.uint8(generated_img*255)[0])) 
 
-#         # save_img_dir = create_img_dir(trained_steps)
-#         # file_names = os.listdir(lr_dir_path)
+        save_img_dir = create_img_dir(trained_steps)
+        file_names = os.listdir(val_img_dir)
         
-#         # for i, file_name in enumerate(file_names[:5]):  # here: 5 prediction examples
-#         #     lr_file_path = f"{lr_dir_path}/{file_name}"
-#         #     img = resolve_single_image(lr_file_path)
-#         #     img.save(f"{save_img_dir}/{file_name}")
+        for i, file_name in enumerate(file_names):  # here: 5 prediction examples
+            val_img_file_path = f"{val_img_dir}/{file_name}"
+            img = resolve_single_image(val_img_file_path)
+            img.save(f"{save_img_dir}/{file_name}")
 
 
 # **************************************
 #
 # **************************************
-class CycleModel(tf.Module):  # regarding parameter: https://stackoverflow.com/a/60509193
-    def __init__(self, img_shape):
+class CycleModel(): 
+    def __init__(self, img_shape, number_resnet_blocks):
         self.img_shape = img_shape
- 
+        self.number_resnet_blocks = number_resnet_blocks  # 6 or 9
+
     
-    def build_generator(n_resnet=9):
+    def build_generator(self):
         '''
+        See also: https://keras.io/examples/generative/cyclegan/
         n_resnet = 9 -> 256x256
         n_resnet = 6 -> 128x128
+        InstanceNormalization: replacement for batch normalization (https://www.tensorflow.org/addons/tutorials/layers_normalizations)
         '''
         def resnet_block(filters, x_in):
             kernel_initializer = RandomNormal(stddev=0.02)
@@ -99,7 +102,7 @@ class CycleModel(tf.Module):  # regarding parameter: https://stackoverflow.com/a
             return x
 
 
-        def add_layer(x_in, filters, kernel_size, kernel_initializer, use_strides=True):
+        def down_sampling(x_in, filters, kernel_size, kernel_initializer, use_strides=True):
             if use_strides:
                 x = Conv2D(filters=filters, kernel_size=kernel_size, strides=(2,2), padding='same', kernel_initializer=kernel_initializer)(x_in)
             else:
@@ -115,13 +118,22 @@ class CycleModel(tf.Module):  # regarding parameter: https://stackoverflow.com/a
         
         x_in = Input(shape=self.img_shape)
         
-        x = add_layer(x_in=x_in, filters=64, kernel_size=(7,7), kernel_initializer=kernel_initializer, use_strides=False)
-        x = add_layer(x_in=x, filters=128, kernel_size=(3,3), kernel_initializer=kernel_initializer)
-        x = add_layer(x_in=x, filters=256, kernel_size=(2,2), kernel_initializer=kernel_initializer)
+        # ***
+        # downsampling using conv2d
+        # ***
+        x = down_sampling(x_in=x_in, filters=64, kernel_size=(7,7), kernel_initializer=kernel_initializer, use_strides=False)
+        x = down_sampling(x_in=x, filters=128, kernel_size=(3,3), kernel_initializer=kernel_initializer)
+        x = down_sampling(x_in=x, filters=256, kernel_size=(2,2), kernel_initializer=kernel_initializer)
        
-        for _ in range(n_resnet):
+        # ***
+        # transform hidden representation using resnet blocks
+        # ***
+        for _ in range(self.number_resnet_blocks):
             x = resnet_block(256, x)
 
+        # ***
+        # upsampling: recover transformed image
+        # ***
         x = Conv2DTranspose(filters=128, kernel_size=(3,3), strides=(2,2), padding='same', kernel_initializer=kernel_initializer)(x)
         x = InstanceNormalization(axis=-1)(x)
         x = Activation('relu')(x)
@@ -130,20 +142,20 @@ class CycleModel(tf.Module):  # regarding parameter: https://stackoverflow.com/a
         x = InstanceNormalization(axis=-1)(x)
         x = Activation('relu')(x)
         
-        
         x = Conv2D(filters=3, kernel_size=(7,7), padding='same', kernel_initializer=kernel_initializer)(x)
         x = InstanceNormalization(axis=-1)(x)
-        x_out = Activation('tanh')(x)
+
+        x_out = Activation('tanh')(x)  # normalize output image with tanh activation
         
         return Model(x_in, x_out)
 
 
     def build_discriminator(self):
-        def discriminator_block(x_in, filters, kernel_initializer, strides=1, normalization=True, use_strides=True):
-            if use_kernel_size:
-                x = Conv2D(filters, filter=filters, kernel_size=(4,4), strides=(2,2), padding='same', kernel_initializer=kernel_initializer)(x_in)
+        def discriminator_block(x_in, filters, kernel_initializer, normalization=True, use_strides=True):
+            if use_strides is True:
+                x = Conv2D(filters=filters, kernel_size=(4,4), strides=(2,2), padding='same', kernel_initializer=kernel_initializer)(x_in)
             else:
-                x = Conv2D(filters, filter=filters, kernel_size=(4,4), padding='same', kernel_initializer=kernel_initializer)(x_in)
+                x = Conv2D(filters=filters, kernel_size=(4,4), padding='same', kernel_initializer=kernel_initializer)(x_in)
             
             if normalization:
                 x = InstanceNormalization(axis=-1)(x)
@@ -163,7 +175,7 @@ class CycleModel(tf.Module):  # regarding parameter: https://stackoverflow.com/a
 
         x = discriminator_block(x, filters=512, use_strides=False, kernel_initializer=kernel_initializer)
 
-        x_out = Conv2D(filter=1, kernel_size=(4,4), padding='same', kernel_initializer=kernel_initializer)(d)
+        x_out = Conv2D(filters=1, kernel_size=(4,4), padding='same', kernel_initializer=kernel_initializer)(x)
 
         model = Model(x_in, x_out)
         model.compile(
@@ -216,22 +228,26 @@ class CycleModel(tf.Module):  # regarding parameter: https://stackoverflow.com/a
 #
 # **************************************
 class Trainer():
-    def __init__(self, use_pretrain_weights=False):
+    def __init__(self):
         # ***
         # Input shape
         # ***
         self.img_shape = (TRAIN_IMG_SIZE, TRAIN_IMG_SIZE, CHANNELS)
+        print(self.img_shape)
         
         # ***
         # data loader and utils
         # ***
         self.data_loader = DataLoader(TRAIN_IMG_SIZE, PERCENT_OF_TRAINING_SET)
-        # self.utils = Utils()
+        self.utils = Utils()
 
         # ***
-        #
+        # create cycleModel instancce
+        # number_resnet_blocks in generator = 9 -> 256x256
+        # number_resnet_blocks in generator = 6 -> 128x128
         # ***
-        self.cycle_model = CycleModel(self.img_shape)
+        number_resnet_blocks = 9 if TRAIN_IMG_SIZE > 128 else 6
+        self.cycle_model = CycleModel(self.img_shape, number_resnet_blocks)
 
         # ***
         # generators
@@ -242,42 +258,40 @@ class Trainer():
         # ***
         # discriminators
         # ***
-        self.discriminator_A = self.cycle_model.build_discriminator(image_shape)  # A -> [real/fake]
-        self.discriminator_B = self.cycle_model.build_discriminator(image_shape)  # B -> [real/fake]
+        self.discriminator_A = self.cycle_model.build_discriminator()  # A -> [real/fake]
+        self.discriminator_B = self.cycle_model.build_discriminator()  # B -> [real/fake]
 
         # ***
         # composites
         # ***
-        self.composite_A_B = self.cycle_model.build_composite(generator_A_B, generator_B_A, discriminator_B)  # A -> B -> [real/fake, A]
-        self.composite_B_A = self.cycle_model.build_composite(generator_B_A, generator_A_B, discriminator_A)  # B -> A -> [real/fake, B]
+        self.composite_A_B = self.cycle_model.build_composite(self.generator_A_B, self.generator_B_A, self.discriminator_B)  # A -> B -> [real/fake, A]
+        self.composite_B_A = self.cycle_model.build_composite(self.generator_B_A, self.generator_A_B, self.discriminator_A)  # B -> A -> [real/fake, B]
 
         # ***
-        # get output shape of the discriminator
+        # get output square shape of the discriminator
         # ***
-        self.n_patch = self.discriminator_A.output_shape[1]
+        self.patch = self.discriminator_A.output_shape[1]
+       
+        # ***
+        # save training in checkpoint
+        # ***
+        self.checkpoint = tf.train.Checkpoint(
+            step=tf.Variable(0),
+            generator_A_B=self.generator_A_B,
+            generator_B_A=self.generator_B_A,
+            discriminator_A=self.discriminator_A,
+            discriminator_B=self.discriminator_B,
+            composite_A_B=self.composite_A_B,
+            composite_B_A=self.composite_B_A
+        )
 
-        # # ***
-        # # save training in checkpoint
-        # # necessary to keep all values (i.e. optimizer) when interrupting & resuming training
-        # # ***
-        # self.checkpoint = tf.train.Checkpoint(
-        #     step=tf.Variable(0),
-        #     # optimizer_generator=Adam(learning_rate=LEARNING_RATE),
-        #     # optimizer_discriminator=Adam(learning_rate=LEARNING_RATE),
-        #     # model=CycleModel(self.hr_shape, self.lr_shape, self.channels)
-        # )
+        self.checkpoint_manager = tf.train.CheckpointManager(
+            checkpoint=self.checkpoint,
+            directory=CHECKPOINT_DIR,
+            max_to_keep=1
+        )
 
-        # self.checkpoint_manager = tf.train.CheckpointManager(
-        #     checkpoint=self.checkpoint,
-        #     #directory=FINE_TUNE_CHECKPOINT_DIR,
-        #     max_to_keep=1
-        # )
-
-        # # ***
-        # # either: start training with pretrained generator weights a) if parameter is True and b) if weights are available
-        # # or: get latest checkpoint of training  a) if parameter is False and b) if checkpoint is available
-        # # ***
-        # self.restore_checkpoint()
+        self.restore_checkpoint()
 
 
     # ***
@@ -288,82 +302,131 @@ class Trainer():
             self.checkpoint.restore(self.checkpoint_manager.latest_checkpoint)
             print(f"Restore checkpoint at step {self.checkpoint.step.numpy()}.")
 
-    # ***
-    # loss functions, used in training step
-    # ***
-    
 
     # ***
     #
     # ***
-    @tf.function
-    def train_step(self, lr_img, hr_img):
-        pass
-        # with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
-        #     hr_generated = self.checkpoint.model.generator(lr_img, training=True)
-
-        #     # ***
-        #     # discriminator
-        #     # ***
-        #     hr_output = self.checkpoint.model.discriminator(hr_img, training=True)
-        #     hr_generated_output = self.checkpoint.model.discriminator(hr_generated, training=True)
-
-        #     fake_logit, real_logit = self.relativistic_loss(hr_output, hr_generated_output)
-
-        #     discriminator_loss = self.discriminator_loss(fake_logit, real_logit)
-
-        #     # ***
-        #     # generator
-        #     # ***
-        #     content_loss = self.content_loss(hr_img, hr_generated)
-        #     generator_loss = self.generator_loss(real_logit, fake_logit)
-        #     perceptual_loss = content_loss + 0.001 * generator_loss
-            
-
-        # gradients_generator = gen_tape.gradient(perceptual_loss, self.checkpoint.model.generator.trainable_variables)
-        # gradients_discriminator = disc_tape.gradient(discriminator_loss, self.checkpoint.model.discriminator.trainable_variables)
-
-        # self.checkpoint.optimizer_generator.apply_gradients(zip(gradients_generator, self.checkpoint.model.generator.trainable_variables))
-        # self.checkpoint.optimizer_discriminator.apply_gradients(zip(gradients_discriminator, self.checkpoint.model.discriminator.trainable_variables))
-
-        # return perceptual_loss, discriminator_loss
+    def generate_fake_images(self, generator, batch_real_images):
+        X = generator.predict(batch_real_images)
+        y = np.zeros((len(X), self.patch, self.patch, 1))  # create 0 labels
+	    
+        return X, y
 
     
+    def update_image_pool(self, fake_images, max_size=10):
+        selected = []
+        pool = []
+
+        for image in fake_images:
+            if len(pool) < max_size:
+                pool.append(image)  # stock the pool
+                selected.append(image)
+            elif numpy.random.uniform(0.0, 1.0) < 0.5:
+                selected.append(image)  # use image, but don't add it to the pool
+            else:
+                ix = np.random.randint(0, len(pool)) # replace an existing image and use replaced image
+                selected.append(pool[ix])
+                pool[ix] = image
+
+        return np.asarray(selected)
+
+
     # ***
     #
     # ***
-    def train(self, epochs=10, batch_size=1, sample_interval=2, blur_lr_images=False):
+    def train_step(self, batch_size, X_real_A, X_real_B):
+        y_real_A = np.ones((batch_size, self.patch, self.patch, 1))  # create 1 labels
+        y_real_B = np.ones((batch_size, self.patch, self.patch, 1))
+
+        # ***
+        #
+        # ***
+        X_fake_A, y_fake_A = self.generate_fake_images(self.checkpoint.generator_B_A, X_real_B)
+        X_fake_B, y_fake_B = self.generate_fake_images(self.checkpoint.generator_A_B, X_real_A)
+
+        # ***
+        #
+        # ***
+        X_fake_A = self.update_image_pool(X_fake_A)
+        X_fake_B = self.update_image_pool(X_fake_B)
+        
+        # ***
+        # train generator B->A only (use generator A->B and discriminator_A)
+        # ***
+        g_B_A_loss, _, _, _, _  = self.checkpoint.composite_B_A.train_on_batch(
+            [X_real_B, X_real_A], 
+            [y_real_A, X_real_A, X_real_B, X_real_A]
+        )
+
+        # ***
+        # update discriminator for A -> [real/fake]
+        # ***
+        d_A_loss_real = self.checkpoint.discriminator_A.train_on_batch(X_real_A, y_real_A)
+        d_A_loss_fake = self.checkpoint.discriminator_A.train_on_batch(X_fake_A, y_fake_A)
+        
+        # ***
+        # train generator A->B only (use generator B->A and discriminator_B)
+        # ***
+        g_A_B_loss, _, _, _, _ = self.checkpoint.composite_A_B.train_on_batch(
+            [X_real_A, X_real_B],
+            [y_real_B, X_real_B, X_real_A, X_real_B]
+        )
+
+        # ***
+        # update discriminator for B -> [real/fake]
+        # # ***
+        d_B_loss_real = self.checkpoint.discriminator_B.train_on_batch(X_real_B, y_real_B)
+        d_B_loss_fake = self.checkpoint.discriminator_B.train_on_batch(X_fake_B, y_fake_B)
+
+        return g_B_A_loss, d_A_loss_real, d_A_loss_fake, g_A_B_loss, d_B_loss_real, d_B_loss_fake
+
+
+    # ***
+    #
+    # ***
+    def train(self, epochs=10, batch_size=1, sample_interval=2):
+        batch_per_epoch = int(self.data_loader.get_train_set_size() / batch_size)
+        steps = batch_per_epoch * epochs
+
+        print("*********")
+        print(f"steps to train: {steps} | train set size: {self.data_loader.get_train_set_size()} image pairs")
+        print("*********")
+
         start_time = datetime.datetime.now()  # for controle dump only
 
-        for epoch in range(epochs):
-            # self.checkpoint.step.assign_add(batch_size)  # update steps in checkpoint
-            # trained_steps = self.checkpoint.step.numpy() # overall trained steps: for controle dump only
+        for step in range(steps):
+            self.checkpoint.step.assign_add(1)  # update steps in checkpoint
+            trained_steps = self.checkpoint.step.numpy()  # overall trained steps: for controle dump only
             
             # ***
-            # train on batch
+            # get real images and create image label (y)
             # ***
-            # imgs_hr, imgs_lr = self.data_loader.load_data(batch_size=batch_size, blur_lr_images=blur_lr_images)
-            # perceptual_loss, discriminator_loss = self.train_step(imgs_lr, imgs_hr)
+            X_real_A, X_real_B = self.data_loader.load_data(batch_size=batch_size)
+            
+            # ***
+            # train model
+            # ***
+            g_B_A_loss, d_A_loss_real, d_A_loss_fake, g_A_B_loss, d_B_loss_real, d_B_loss_fake = self.train_step(batch_size, X_real_A, X_real_B)
 
             elapsed_time = datetime.datetime.now() - start_time  # for controle dump only
 
             # ***
             # save and/or dump
-             # ***
-            if (epoch + 1) % 10 == 0:
-                print("xxx")
-                # print(f"{epoch + 1} | steps: {trained_steps} | g_loss: {perceptual_loss} | d_loss: {discriminator_loss} | time: {elapsed_time}")
-            if (epoch + 1) % sample_interval == 0:
+            # ***
+            if (step+1) % 1 == 0:
+                print(f"steps {trained_steps} | g B_A {round(g_B_A_loss, 3)} | d_A real {round(d_A_loss_real, 3)} fake {round(d_A_loss_fake, 3)} | g A_B {round(g_A_B_loss, 3)} | d_B real {round(d_B_loss_real, 3)} fake {round(d_B_loss_fake, 3)} | time: {elapsed_time}")
+            if (step+1) % sample_interval == 0:
                 print("   |---> save and make image sample")
-                # self.checkpoint_manager.save()  # save checkpoint
-                # self.checkpoint.model.generator.save(GENERATOR_MODEL)  # save complete model for actual usage
+                self.checkpoint_manager.save()  # save checkpoint
+                self.checkpoint.generator_A_B.save(GENERATOR_MODEL_A_B)  # save generator model for usage
+                self.checkpoint.generator_B_A.save(GENERATOR_MODEL_B_A)
 
-                # # controle dump of predicted images: save in dirs named by trained_steps
-                # self.utils.test_predict(self.checkpoint.model, self.data_loader, IMG_DIR_VAL_LR, trained_steps, "fine_tune")
-        
+                # controle dump of predicted images: save in dirs named by trained_steps
+                self.utils.test_predict(self.checkpoint.generator_A_B, self.data_loader, IMG_DIR_VAL_A, trained_steps, "A_2_B")
+                self.utils.test_predict(self.checkpoint.generator_B_A, self.data_loader, IMG_DIR_VAL_B, trained_steps, "B_2_A")
+
 
 
 if __name__ == '__main__':
-    trainer = Trainer(use_pretrain_weights=True)  # use this parameter on very first training run (default: False)
-    # trainer = Trainer()  # use this if you continue training (i.e. after interruption)
-    # trainer.train(epochs=4000, batch_size=4, sample_interval=1000, blur_lr_images=True)  # blur_lr_images default: False
+    trainer = Trainer()
+    trainer.train(epochs=1, batch_size=1, sample_interval=2)  # set_interval refers to steps

@@ -9,7 +9,7 @@ verify_ssl = true
 numpy = "*"
 Pillow = "*"
 tensorflow = "*"
-tf_keras_contrib = "*"
+tensorflow-addons = "*"
 tqdm = "*"
 scipy = "*"
 
