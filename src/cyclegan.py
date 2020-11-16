@@ -1,4 +1,3 @@
-
 '''
 See also: https://machinelearningmastery.com/cyclegan-tutorial-with-keras/
 '''
