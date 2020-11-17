@@ -1,19 +1,17 @@
+
 '''
-See also: https://machinelearningmastery.com/cyclegan-tutorial-with-keras/
+See also: https://github.com/eriklindernoren/Keras-GAN/blob/master/cyclegan/cyclegan.py
 '''
 import datetime
 import os
-import pickle
 
 from data_loader import DataLoader
 
 import tensorflow as tf
-from tensorflow.keras import backend as K
 
 from tensorflow_addons.layers import InstanceNormalization
-from tensorflow.keras.initializers import RandomNormal
-from tensorflow.keras.layers import Activation, Add, Concatenate, Conv2D, Conv2DTranspose, Input, LeakyReLU
-from tensorflow.keras.models import Model
+from tensorflow.keras.layers import UpSampling2D, Activation, Add, Concatenate, Conv2D, Input, LeakyReLU
+from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras.optimizers import Adam
 
 import numpy as np
@@ -33,7 +31,7 @@ IMG_DIR_PREDICTED = "../test_predictions"
 TRAIN_IMG_SIZE = 128
 CHANNELS = 3
 
-PERCENT_OF_TRAINING_SET=0.2  # check out actual training set (size) and if everything would fit into memory
+PERCENT_OF_TRAINING_SET=0.05  # check out actual training set (size) and if everything would fit into memory
 
 
 # **************************************
@@ -71,156 +69,125 @@ class Utils():
 #
 # **************************************
 class CycleModel(): 
-    def __init__(self, img_shape, number_resnet_blocks):
+    def __init__(self, img_shape, loss_cycle, loss_identity, optimizer):
         self.img_shape = img_shape
-        self.number_resnet_blocks = number_resnet_blocks  # 6 or 9
+        self.channels = self.img_shape[2]
+        self.loss_cycle = loss_cycle
+        self.loss_identity = loss_identity
+        self.optimizer = optimizer # ? use the same optimizer for both discr. & combined network ?
 
-    
+
     def build_generator(self):
-        '''
-        See also: https://keras.io/examples/generative/cyclegan/
-        n_resnet = 9 -> 256x256
-        n_resnet = 6 -> 128x128
-        InstanceNormalization: replacement for batch normalization (https://www.tensorflow.org/addons/tutorials/layers_normalizations)
-        '''
-        def resnet_block(filters, x_in):
-            kernel_initializer = RandomNormal(stddev=0.02)
-            
-            # first convolutional layer
-            x = Conv2D(filters=filters, kernel_size=(3,3), padding='same', kernel_initializer=kernel_initializer)(x_in)
-            x = InstanceNormalization(axis=-1)(x)
-            x = Activation('relu')(x)
-            
-            # second convolutional layer
-            x = Conv2D(filters=filters, kernel_size=(3,3), padding='same', kernel_initializer=kernel_initializer)(x)
-            x = InstanceNormalization(axis=-1)(x)
-            
-            # concatenate input layer
-            x = Concatenate()([x, x_in])
-
-            return x
-
-
-        def down_sampling(x_in, filters, kernel_size, kernel_initializer, use_strides=True):
-            if use_strides:
-                x = Conv2D(filters=filters, kernel_size=kernel_size, strides=(2,2), padding='same', kernel_initializer=kernel_initializer)(x_in)
-            else:
-                x = Conv2D(filters=filters, kernel_size=kernel_size, padding='same', kernel_initializer=kernel_initializer)(x_in)
-            
+        def down_sampling(x_in, filters, kernel_size):
+            '''
+            conv2d
+            '''
+            x = Conv2D(filters=filters, kernel_size=kernel_size, strides=(2,2), padding="same")(x_in)
             x = InstanceNormalization(axis=-1)(x)
             x = Activation('relu')(x)
 
             return x
 
-        
-        kernel_initializer = RandomNormal(stddev=0.02)
+
+        def up_sampling(x_in, skip_input, filters, kernel_size, dropout_rate=0):
+            '''
+            deconv2d
+            '''
+            x = UpSampling2D(size=2)(x_in)
+            x = Conv2D(filters=filters, kernel_size=kernel_size, strides=(1,1), padding="same", activation="relu")(x)
+            if dropout_rate:  # ?
+                x = Dropout(dropout_rate)(x)
+            x = InstanceNormalization()(x)
+            x = Concatenate()([x, skip_input])
+            return x
+
         
         x_in = Input(shape=self.img_shape)
         
         # ***
-        # downsampling using conv2d
+        # downsampling: conv2d
         # ***
-        x = down_sampling(x_in=x_in, filters=64, kernel_size=(7,7), kernel_initializer=kernel_initializer, use_strides=False)
-        x = down_sampling(x_in=x, filters=128, kernel_size=(3,3), kernel_initializer=kernel_initializer)
-        x = down_sampling(x_in=x, filters=256, kernel_size=(2,2), kernel_initializer=kernel_initializer)
-       
-        # ***
-        # transform hidden representation using resnet blocks
-        # ***
-        for _ in range(self.number_resnet_blocks):
-            x = resnet_block(256, x)
+        d_1 = down_sampling(x_in=x_in, filters=32, kernel_size=(4,4))
+        d_2 = down_sampling(x_in=d_1, filters=64, kernel_size=(4,4))
+        d_3 = down_sampling(x_in=d_2, filters=128, kernel_size=(4,4))
+        d_4 = down_sampling(x_in=d_3, filters=256, kernel_size=(4,4))
 
         # ***
-        # upsampling: recover transformed image
+        # upsampling: deconv2d
         # ***
-        x = Conv2DTranspose(filters=128, kernel_size=(3,3), strides=(2,2), padding='same', kernel_initializer=kernel_initializer)(x)
-        x = InstanceNormalization(axis=-1)(x)
-        x = Activation('relu')(x)
-        
-        x = Conv2DTranspose(filters=64, kernel_size=(3,3), strides=(2,2), padding='same', kernel_initializer=kernel_initializer)(x)
-        x = InstanceNormalization(axis=-1)(x)
-        x = Activation('relu')(x)
-        
-        x = Conv2D(filters=3, kernel_size=(7,7), padding='same', kernel_initializer=kernel_initializer)(x)
-        x = InstanceNormalization(axis=-1)(x)
+        u_1 = up_sampling(x_in=d_4, skip_input=d_3, filters=128, kernel_size=(4,4))
+        u_2 = up_sampling(x_in=u_1, skip_input=d_2, filters=64, kernel_size=(4,4))
+        u_3 = up_sampling(x_in=u_2, skip_input=d_1, filters=32, kernel_size=(4,4))
 
-        x_out = Activation('tanh')(x)  # normalize output image with tanh activation
+        u_4 = UpSampling2D(size=2)(u_3)
         
+        x_out = Conv2D(self.channels, kernel_size=4, strides=(1,1), padding="same", activation="tanh")(u_4)
+
         return Model(x_in, x_out)
 
 
     def build_discriminator(self):
-        def discriminator_block(x_in, filters, kernel_initializer, normalization=True, use_strides=True):
-            if use_strides is True:
-                x = Conv2D(filters=filters, kernel_size=(4,4), strides=(2,2), padding='same', kernel_initializer=kernel_initializer)(x_in)
-            else:
-                x = Conv2D(filters=filters, kernel_size=(4,4), padding='same', kernel_initializer=kernel_initializer)(x_in)
-            
-            if normalization:
-                x = InstanceNormalization(axis=-1)(x)
+        def discriminator_block(x_in, filters, normalization=True):
+            x = Conv2D(filters=filters, kernel_size=(4,4), strides=(2,2), padding="same")(x_in)
             x = LeakyReLU(alpha=0.2)(x)
+            if normalization:
+                x = InstanceNormalization()(x)
 
             return x
 
 
-        kernel_initializer = RandomNormal(stddev=0.02)
-
         x_in = Input(shape=self.img_shape)
 
-        x = discriminator_block(x_in, filters=64, normalization=False, kernel_initializer=kernel_initializer)
-        x = discriminator_block(x, filters=128, kernel_initializer=kernel_initializer)
-        x = discriminator_block(x, filters=256, kernel_initializer=kernel_initializer)
-        x = discriminator_block(x, filters=512, kernel_initializer=kernel_initializer)
+        x = discriminator_block(x_in=x_in, filters=64, normalization=False)
+        x = discriminator_block(x_in=x, filters=128)
+        x = discriminator_block(x_in=x, filters=256)
+        x = discriminator_block(x_in=x, filters=512)
 
-        x = discriminator_block(x, filters=512, use_strides=False, kernel_initializer=kernel_initializer)
-
-        x_out = Conv2D(filters=1, kernel_size=(4,4), padding='same', kernel_initializer=kernel_initializer)(x)
+        x_out = Conv2D(filters=1, kernel_size=(4,4), padding="same")(x)
 
         model = Model(x_in, x_out)
+        
         model.compile(
-            loss='mse', 
-            optimizer=Adam(lr=0.0002, beta_1=0.5), 
-            loss_weights=[0.5]
+            loss="mse",
+            optimizer=self.optimizer,
+            metrics=["accuracy"]
         )
 
         return model
 
 
-    def build_composite(self, generator_a, generator_b, discriminator):
-        generator_a.trainable = True
-        generator_b.trainable = False
+    def build_combined(self, generator_a_b, generator_b_a, discriminator_a, discriminator_b):
+        img_A = Input(shape=self.img_shape)
+        img_B = Input(shape=self.img_shape)
 
-        discriminator.trainable = False
-        
-        x_in = Input(shape=self.img_shape)
-        
-        output_generator_a = generator_a(x_in)
-        output_discriminator = discriminator(output_generator_a)
-        
-        # identity element
-        input_id = Input(shape=self.img_shape)
-        output_id = generator_a(input_id)
-        
-        # forward cycle
-        output_forward = generator_b(output_generator_a)
-        
-        # backward cycle
-        output_generator_b = generator_b(input_id)
-        output_backward = generator_a(output_generator_b)
-        
-        # define model graph
+        fake_B = generator_a_b(img_A)
+        fake_A = generator_b_a(img_B)
+
+        reconstr_A = generator_b_a(fake_B)
+        reconstr_B = generator_a_b(fake_A)
+
+        img_A_id = generator_b_a(img_A)
+        img_B_id = generator_a_b(img_B)
+
+        discriminator_a.trainable = False
+        discriminator_b.trainable = False
+
+        valid_A = discriminator_a(fake_A)
+        valid_B = discriminator_b(fake_B)
+
         model = Model(
-            [x_in, input_id], 
-            [output_discriminator, output_id, output_forward, output_backward]
+            inputs=[img_A, img_B],
+            outputs=[valid_A, valid_B, reconstr_A, reconstr_B, img_A_id, img_B_id ]
         )
-        
+
         model.compile(
-            loss=['mse', 'mae', 'mae', 'mae'], 
-            loss_weights=[1, 5, 10, 10], 
-            optimizer=Adam(lr=0.0002, beta_1=0.5)
+            loss=["mse", "mse", "mae", "mae", "mae", "mae"],
+            loss_weights=[1, 1, self.loss_cycle, self.loss_cycle, self.loss_identity, self.loss_identity],
+            optimizer=self.optimizer
         )
-        
+
         return model
+
 
 
 # **************************************
@@ -232,7 +199,6 @@ class Trainer():
         # Input shape
         # ***
         self.img_shape = (TRAIN_IMG_SIZE, TRAIN_IMG_SIZE, CHANNELS)
-        print(self.img_shape)
         
         # ***
         # data loader and utils
@@ -241,12 +207,20 @@ class Trainer():
         self.utils = Utils()
 
         # ***
-        # create cycleModel instancce
-        # number_resnet_blocks in generator = 9 -> 256x256
-        # number_resnet_blocks in generator = 6 -> 128x128
+        # loss weights
         # ***
-        number_resnet_blocks = 9 if TRAIN_IMG_SIZE > 128 else 6
-        self.cycle_model = CycleModel(self.img_shape, number_resnet_blocks)
+        self.loss_cycle = 10.0  # cycle consistency loss
+        self.loss_identity = 0.1 * self.loss_cycle  # identity loss
+
+        # ***
+        # optimizer
+        # ***
+        self.optimizer = Adam(0.0002, 0.5)
+
+        # ***
+        # create cycleModel instancce
+        # ***
+        self.cycle_model = CycleModel(self.img_shape, self.loss_cycle, self.loss_identity, self.optimizer)
 
         # ***
         # generators
@@ -263,14 +237,24 @@ class Trainer():
         # ***
         # composites
         # ***
-        self.composite_A_B = self.cycle_model.build_composite(self.generator_A_B, self.generator_B_A, self.discriminator_B)  # A -> B -> [real/fake, A]
-        self.composite_B_A = self.cycle_model.build_composite(self.generator_B_A, self.generator_A_B, self.discriminator_A)  # B -> A -> [real/fake, B]
-
+        self.combined = self.cycle_model.build_combined(self.generator_A_B, self.generator_B_A, self.discriminator_A, self.discriminator_B)  # A -> B -> [real/fake, A]
+        
         # ***
         # get output square shape of the discriminator
         # ***
-        self.patch = self.discriminator_A.output_shape[1]
-       
+        self.discriminator_patch = (
+            self.discriminator_A.output_shape[1], 
+            self.discriminator_A.output_shape[1], 
+            1
+        )
+
+        # ***
+        # adversarial loss ground truths
+        # set valid and fake with used batch size in train()
+        # ***
+        self.valid = np.ones((1,) + self.discriminator_patch)
+        self.fake = np.zeros((1,) + self.discriminator_patch)
+        
         # ***
         # save training in checkpoint
         # ***
@@ -280,8 +264,7 @@ class Trainer():
             generator_B_A=self.generator_B_A,
             discriminator_A=self.discriminator_A,
             discriminator_B=self.discriminator_B,
-            composite_A_B=self.composite_A_B,
-            composite_B_A=self.composite_B_A
+            combined=self.combined
         )
 
         self.checkpoint_manager = tf.train.CheckpointManager(
@@ -305,79 +288,34 @@ class Trainer():
     # ***
     #
     # ***
-    def generate_fake_images(self, generator, batch_real_images):
-        X = generator.predict(batch_real_images)
-        y = np.zeros((len(X), self.patch, self.patch, 1))  # create 0 labels
-	    
-        return X, y
-
-    
-    def update_image_pool(self, fake_images, max_size=10):
-        selected = []
-        pool = []
-
-        for image in fake_images:
-            if len(pool) < max_size:
-                pool.append(image)  # stock the pool
-                selected.append(image)
-            elif numpy.random.uniform(0.0, 1.0) < 0.5:
-                selected.append(image)  # use image, but don't add it to the pool
-            else:
-                ix = np.random.randint(0, len(pool)) # replace an existing image and use replaced image
-                selected.append(pool[ix])
-                pool[ix] = image
-
-        return np.asarray(selected)
-
-
-    # ***
-    #
-    # ***
-    def train_step(self, batch_size, X_real_A, X_real_B):
-        y_real_A = np.ones((batch_size, self.patch, self.patch, 1))  # create 1 labels
-        y_real_B = np.ones((batch_size, self.patch, self.patch, 1))
+    def train_step(self, X_real_A, X_real_B):
+        X_fake_B = self.checkpoint.generator_A_B.predict(X_real_A)
+        X_fake_A = self.checkpoint.generator_B_A.predict(X_real_B)
 
         # ***
-        #
+        # train discriminators
         # ***
-        X_fake_A, y_fake_A = self.generate_fake_images(self.checkpoint.generator_B_A, X_real_B)
-        X_fake_B, y_fake_B = self.generate_fake_images(self.checkpoint.generator_A_B, X_real_A)
+        dA_loss_real = self.checkpoint.discriminator_A.train_on_batch(X_real_A, self.valid)
+        dA_loss_fake = self.checkpoint.discriminator_A.train_on_batch(X_fake_A, self.fake)
+        dA_loss = 0.5 * np.add(dA_loss_real, dA_loss_fake)
+
+        dB_loss_real = self.checkpoint.discriminator_B.train_on_batch(X_real_B, self.valid)
+        dB_loss_fake = self.checkpoint.discriminator_B.train_on_batch(X_fake_B, self.fake)
+        dB_loss = 0.5 * np.add(dB_loss_real, dB_loss_fake)
+
+        # total disciminator loss
+        d_loss = 0.5 * np.add(dA_loss, dB_loss)
+
 
         # ***
-        #
+        # train generators in combined network
         # ***
-        X_fake_A = self.update_image_pool(X_fake_A)
-        X_fake_B = self.update_image_pool(X_fake_B)
-        
-        # ***
-        # train generator B->A only (use generator A->B and discriminator_A)
-        # ***
-        g_B_A_loss, _, _, _, _  = self.checkpoint.composite_B_A.train_on_batch(
-            [X_real_B, X_real_A], 
-            [y_real_A, X_real_A, X_real_B, X_real_A]
-        )
-
-        # ***
-        # update discriminator for A -> [real/fake]
-        # ***
-        d_A_loss_real = self.checkpoint.discriminator_A.train_on_batch(X_real_A, y_real_A)
-        d_A_loss_fake = self.checkpoint.discriminator_A.train_on_batch(X_fake_A, y_fake_A)
-        
-        # ***
-        # train generator A->B only (use generator B->A and discriminator_B)
-        # ***
-        g_A_B_loss, _, _, _, _ = self.checkpoint.composite_A_B.train_on_batch(
+        g_loss = self.checkpoint.combined.train_on_batch(
             [X_real_A, X_real_B],
-            [y_real_B, X_real_B, X_real_A, X_real_B]
+            [self.valid, self.valid, X_real_A, X_real_B, X_real_A, X_real_B]
         )
 
-        # ***
-        # update discriminator for B -> [real/fake]
-        # # ***
-        d_B_loss_real = self.checkpoint.discriminator_B.train_on_batch(X_real_B, y_real_B)
-        d_B_loss_fake = self.checkpoint.discriminator_B.train_on_batch(X_fake_B, y_fake_B)
-
-        return g_B_A_loss, d_A_loss_real, d_A_loss_fake, g_A_B_loss, d_B_loss_real, d_B_loss_fake
+        return d_loss, g_loss
 
 
     # ***
@@ -386,12 +324,20 @@ class Trainer():
     def train(self, epochs=10, batch_size=1, sample_interval=2):
         batch_per_epoch = int(self.data_loader.get_train_set_size() / batch_size)
         steps = batch_per_epoch * epochs
+        sample_interval_steps = int(steps/epochs)*sample_interval
 
         print("*********")
         print(f"steps to train: {steps} | train set size: {self.data_loader.get_train_set_size()} image pairs")
+        print(f"save every {sample_interval_steps} steps")
         print("*********")
 
         start_time = datetime.datetime.now()  # for controle dump only
+
+        # ***
+        # adversarial loss ground truths
+        # ***
+        self.valid = np.ones((batch_size,) + self.discriminator_patch)
+        self.fake = np.zeros((batch_size,) + self.discriminator_patch)
 
         for step in range(steps):
             self.checkpoint.step.assign_add(1)  # update steps in checkpoint
@@ -405,16 +351,16 @@ class Trainer():
             # ***
             # train model
             # ***
-            g_B_A_loss, d_A_loss_real, d_A_loss_fake, g_A_B_loss, d_B_loss_real, d_B_loss_fake = self.train_step(batch_size, X_real_A, X_real_B)
+            d_loss, g_loss = self.train_step(X_real_A, X_real_B)
 
             elapsed_time = datetime.datetime.now() - start_time  # for controle dump only
 
             # ***
             # save and/or dump
             # ***
-            if (step+1) % 1 == 0:
-                print(f"steps {trained_steps} | g B_A {round(g_B_A_loss, 3)} | d_A real {round(d_A_loss_real, 3)} fake {round(d_A_loss_fake, 3)} | g A_B {round(g_A_B_loss, 3)} | d_B real {round(d_B_loss_real, 3)} fake {round(d_B_loss_fake, 3)} | time: {elapsed_time}")
-            if (step+1) % sample_interval == 0:
+            if (step+1) % 50 == 0:
+                print(f"{step+1} steps {trained_steps} | g loss {round(g_loss[0],4)} | d loss {round(d_loss[0],4)} | time: {elapsed_time}")
+            if (step+1) % sample_interval_steps == 0:
                 print("   |---> save and make image sample")
                 self.checkpoint_manager.save()  # save checkpoint
                 self.checkpoint.generator_A_B.save(GENERATOR_MODEL_A_B)  # save generator model for usage
@@ -428,4 +374,4 @@ class Trainer():
 
 if __name__ == '__main__':
     trainer = Trainer()
-    trainer.train(epochs=1, batch_size=1, sample_interval=2)  # set_interval refers to steps
+    trainer.train(epochs=100, batch_size=4, sample_interval=20)  # set_interval refers to epochs

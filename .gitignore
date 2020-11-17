@@ -11,7 +11,9 @@ Pipfile.lock
 
 model/checkpoints/*
 model/*
+model_old/*
 
 test_predictions/*
+test_predictions_old/*
 
 !**/README.md
