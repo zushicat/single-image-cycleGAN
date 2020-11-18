@@ -13,34 +13,35 @@ IMG_B_DIR = "trainB"
 
 
 class DataLoader():
-    def __init__(self, image_size=128, percent_of_training_set=0.5):
-        self.datagen = ImageDataGenerator(
-            rotation_range=90,
-            horizontal_flip=True,
-            vertical_flip=True,
-            width_shift_range=0.1,
-            height_shift_range=0.1,
-            fill_mode="reflect"
-        )
+    def __init__(self, image_size=128, percent_of_training_set=0.5, load_training_set=True):
+        if load_training_set is True:
+            self.datagen = ImageDataGenerator(
+                rotation_range=90,
+                horizontal_flip=True,
+                vertical_flip=True,
+                width_shift_range=0.1,
+                height_shift_range=0.1,
+                fill_mode="reflect"
+            )
 
-        self.image_size = image_size
-        
-        self.percent_of_training_set = percent_of_training_set
+            self.image_size = image_size
+            
+            self.percent_of_training_set = percent_of_training_set
 
-        self.images_path_A = glob(f'{BASE_PATH}/{IMG_A_DIR}/*.jpg') 
-        self.images_path_B = glob(f'{BASE_PATH}/{IMG_B_DIR}/*.jpg') 
+            self.images_path_A = glob(f'{BASE_PATH}/{IMG_A_DIR}/*.jpg') 
+            self.images_path_B = glob(f'{BASE_PATH}/{IMG_B_DIR}/*.jpg') 
 
-        # ***
-        # get number of images from % of smallest set of both sets
-        # ***
-        self.num_images_from_training_set = self.set_image_number_to_load()
-        
-        # ***
-        # get image sets
-        # ***
-        self.images = []  # List[List, List]
-        self.images.append(self.load_images(self.images_path_A))
-        self.images.append(self.load_images(self.images_path_B))
+            # ***
+            # get number of images from % of smallest set of both sets
+            # ***
+            self.num_images_from_training_set = self.set_image_number_to_load()
+            
+            # ***
+            # get image sets
+            # ***
+            self.images = []  # List[List, List]
+            self.images.append(self.load_images(self.images_path_A))
+            self.images.append(self.load_images(self.images_path_B))
         
 
     def set_image_number_to_load(self):

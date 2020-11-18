@@ -11,7 +11,8 @@ Pipfile.lock
 
 model/checkpoints/*
 model/*
-model_old/*
+model_0/*
+model_1/*
 
 test_predictions/*
 test_predictions_old/*
