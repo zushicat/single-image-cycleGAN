@@ -428,4 +428,4 @@ class Trainer():
 
 if __name__ == '__main__':
     trainer = Trainer()
-    trainer.train(epochs=1, batch_size=1, sample_interval=2)  # set_interval refers to steps
+    # trainer.train(epochs=1, batch_size=1, sample_interval=2)  # set_interval refers to steps
