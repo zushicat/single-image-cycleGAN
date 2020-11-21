@@ -34,6 +34,8 @@ CHANNELS = 3
 
 PERCENT_OF_TRAINING_SET=0.05  # check out actual training set (size) and if everything would fit into memory
 
+USE_IMG_RATIO = 0.6715  # square img: 1.0
+
 
 # **************************************
 #
@@ -63,6 +65,10 @@ class Utils():
         for i, file_name in enumerate(file_names):  
             val_img_file_path = f"{val_img_dir}/{file_name}"
             img = resolve_single_image(val_img_file_path)
+            
+            if USE_IMG_RATIO < 1.0:
+                img = img.resize((size, int(size*USE_IMG_RATIO)))
+            
             img.save(f"{save_img_dir}/{file_name}")
 
 

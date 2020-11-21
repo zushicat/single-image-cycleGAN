@@ -7,22 +7,25 @@ from tensorflow.keras.preprocessing.image import ImageDataGenerator, load_img, i
 from tqdm import tqdm
 
 
-BASE_PATH = "/Users/karin/programming/data/image_pairs/horse2zebra"
-IMG_A_DIR = "trainA"
-IMG_B_DIR = "trainB"
+BASE_PATH = "/Users/karin/programming/data/image_pairs/tree2no_tree"
+IMG_A_DIR = "train_A"
+IMG_B_DIR = "train_B/*"
 
 
 class DataLoader():
-    def __init__(self, image_size=128, percent_of_training_set=0.5, load_training_set=True):
+    def __init__(self, image_size=128, percent_of_training_set=0.5, load_training_set=True, use_augmentation=True):
         if load_training_set is True:
-            self.datagen = ImageDataGenerator(
-                rotation_range=90,
-                horizontal_flip=True,
-                vertical_flip=True,
-                width_shift_range=0.1,
-                height_shift_range=0.1,
-                fill_mode="reflect"
-            )
+            if use_augmentation is True:
+                self.datagen = ImageDataGenerator(
+                    rotation_range=90,
+                    horizontal_flip=True,
+                    vertical_flip=True,
+                    width_shift_range=0.1,
+                    height_shift_range=0.1,
+                    fill_mode="reflect"
+                )
+            else:
+                self.datagen = ImageDataGenerator()
 
             self.image_size = image_size
             
@@ -110,7 +113,7 @@ class DataLoader():
                 
                 img = Image.fromarray(augmented_img_np_array)
                 img = self.crop_image(img)
-                # img.show()  # debug
+                img.show()  # debug
 
                 # ***
                 # store augmented image
@@ -136,7 +139,9 @@ class DataLoader():
 
 
 if __name__ == "__main__":
-    data_loader = DataLoader(image_size=128, percent_of_training_set=0.01)
-    batch = data_loader.load_data(batch_size=3)
+    data_loader = DataLoader(image_size=128, percent_of_training_set=0.05, use_augmentation=False)
+    # print(len(data_loader.images[0]))
+    # print(len(data_loader.images[1]))
+    batch = data_loader.load_data(batch_size=1)
     print('Loaded', batch[0].shape, batch[1].shape)
 
