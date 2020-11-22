@@ -9,18 +9,19 @@ from tensorflow import keras
 from tensorflow_addons.layers import InstanceNormalization
 
 
-# MODEL = "../model/image_generator_A_B_model.h5"
-MODEL = "../model/image_generator_B_A_model.h5"
+MODEL = "../model/image_generator_A_B_model.h5"
+# MODEL = "../model/image_generator_B_A_model.h5"
 
-# FILE_INPUT_PATH = "/Users/karin/programming/data/image_pairs/horse2zebra/val_A_horse"
-FILE_INPUT_PATH = "/Users/karin/programming/data/image_pairs/horse2zebra/val_B_zebra"
+FILE_INPUT_PATH = "/Users/karin/programming/data/image_pairs/tree2no_tree/val_A"
+# FILE_INPUT_PATH = "/Users/karin/programming/data/image_pairs/tree2no_tree/val_B"
 
 FILE_OUTPUT_PATH = "../test_predictions/model_predictions"
 
-# SAVE_DIR = "A_2_B"
-SAVE_DIR = "B_2_A"
+SAVE_DIR = "A_2_B"
+# SAVE_DIR = "B_2_A"
 
-IMAGE_SIZE = 128
+IMAGE_SIZE = 256  # 128
+USE_IMG_RATIO = 0.6715  # square img: 1.0
 
 
 if __name__ == "__main__":
@@ -31,6 +32,9 @@ if __name__ == "__main__":
        
         output_image = 0.5 * output_image + 0.5
         output_image = Image.fromarray((np.uint8(output_image*255)[0]))
+
+        if USE_IMG_RATIO < 1.0:
+            output_image = output_image.resize((IMAGE_SIZE, int(IMAGE_SIZE*USE_IMG_RATIO)))
         
         return output_image
 

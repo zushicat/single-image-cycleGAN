@@ -24,8 +24,8 @@ GENERATOR_MODEL_B_A = "../model/image_generator_B_A_model.h5"
 
 CHECKPOINT_DIR = "../model/checkpoints"
 
-IMG_DIR_VAL_A = "/Users/karin/programming/data/image_pairs/horse2zebra/val_A_horse"
-IMG_DIR_VAL_B = "/Users/karin/programming/data/image_pairs/horse2zebra/val_B_zebra"
+IMG_DIR_VAL_A = "/Users/karin/programming/data/image_pairs/tree2no_tree/val_A"
+IMG_DIR_VAL_B = "/Users/karin/programming/data/image_pairs/tree2no_tree/val_B"
 
 IMG_DIR_PREDICTED = "../test_predictions"
 
@@ -67,7 +67,7 @@ class Utils():
             img = resolve_single_image(val_img_file_path)
             
             if USE_IMG_RATIO < 1.0:
-                img = img.resize((size, int(size*USE_IMG_RATIO)))
+                img = img.resize((TRAIN_IMG_SIZE, int(TRAIN_IMG_SIZE*USE_IMG_RATIO)))
             
             img.save(f"{save_img_dir}/{file_name}")
 
