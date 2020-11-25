@@ -19,13 +19,13 @@ import numpy as np
 from PIL import Image
 
 
-GENERATOR_MODEL_A_B = "../model/image_generator_A_B_model.h5"
-GENERATOR_MODEL_B_A = "../model/image_generator_B_A_model.h5"
+GENERATOR_MODEL_A_B = "../model_zebra_2_horse/image_generator_A_B_model.h5"
+GENERATOR_MODEL_B_A = "../model_zebra_2_horse/image_generator_B_A_model.h5"
 
 CHECKPOINT_DIR = "../model/checkpoints"
 
-IMG_DIR_VAL_A = "/Users/karin/programming/data/image_pairs/tree2no_tree/val_A"
-IMG_DIR_VAL_B = "/Users/karin/programming/data/image_pairs/tree2no_tree/val_B"
+IMG_DIR_VAL_A = "/Users/karin/programming/data/image_pairs/horse2zebra/val_A"
+IMG_DIR_VAL_B = "/Users/karin/programming/data/image_pairs/horse2zebra/val_B"
 
 IMG_DIR_PREDICTED = "../test_predictions"
 

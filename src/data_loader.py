@@ -7,9 +7,9 @@ from tensorflow.keras.preprocessing.image import ImageDataGenerator, load_img, i
 from tqdm import tqdm
 
 
-BASE_PATH = "/Users/karin/programming/data/image_pairs/tree2no_tree"
+BASE_PATH = "/Users/karin/programming/data/image_pairs/horse2zebra"
 IMG_A_DIR = "train_A"
-IMG_B_DIR = "train_B/*"
+IMG_B_DIR = "train_B"
 
 
 class DataLoader():
@@ -93,6 +93,7 @@ class DataLoader():
         # ***
         # assign random batches
         # ***
+        print(f"--------> {self.num_images_from_training_set}")
         random_indices = np.random.choice(self.num_images_from_training_set, size=batch_size)
         for i in random_indices:
             batch[0].append(self.images[0][i])
@@ -113,7 +114,7 @@ class DataLoader():
                 
                 img = Image.fromarray(augmented_img_np_array)
                 img = self.crop_image(img)
-                img.show()  # debug
+                # img.show()  # debug
 
                 # ***
                 # store augmented image
