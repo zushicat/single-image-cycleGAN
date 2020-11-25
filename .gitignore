@@ -16,7 +16,4 @@ model_1/*
 model_old/*
 model_zebra_2_horse/*
 
-test_predictions/*
-test_predictions_old/*
-
 !**/README.md

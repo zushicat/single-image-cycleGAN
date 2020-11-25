@@ -1,0 +1,1 @@
+Directory for predicted images (by inference.py).
