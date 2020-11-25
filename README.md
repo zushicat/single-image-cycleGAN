@@ -12,7 +12,7 @@ input  | 128 | 256 |  512
 The model for this horse_2_zebra example was trained for 200 epochs on 90% of the training set (960 images) with an input size of 128x128 pixel.    
 (Obviously, the generator for B->A needs more training for this example.)
     
-**Note**
+**Note**    
 Model not included. Create directories (in  main repo dir)
 - /model
 - /model/checkpoints
