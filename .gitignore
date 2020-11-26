@@ -9,11 +9,10 @@ __pycache__/
 
 Pipfile.lock
 
-model/checkpoints/*
 model/*
-model_0/*
-model_1/*
-model_old/*
 model_zebra_2_horse/*
+
+test_predictions/**/*.jpg
+test_predictions/**/*.png
 
 !**/README.md
