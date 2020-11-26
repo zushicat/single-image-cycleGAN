@@ -7,7 +7,7 @@ from tensorflow.keras.preprocessing.image import ImageDataGenerator, load_img, i
 from tqdm import tqdm
 
 
-BASE_PATH = "/Users/karin/programming/data/image_pairs/horse2zebra"
+BASE_PATH = "/Users/karin/programming/data/image_pairs/tree2no_tree"
 IMG_A_DIR = "train_A"
 IMG_B_DIR = "train_B"
 
