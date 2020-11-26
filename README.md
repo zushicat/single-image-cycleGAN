@@ -16,6 +16,7 @@ The model for this horse_2_zebra example was trained for 200 epochs on 90% of th
 Model not included. Create directories (in  main repo dir)
 - /model
 - /model/checkpoints
+to store traines checkpoints and models.
 
 See also:
 - https://junyanz.github.io/CycleGAN/
