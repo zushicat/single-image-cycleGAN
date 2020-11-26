@@ -19,5 +19,7 @@ Model not included. Create directories (in  main repo dir)
 
 See also:
 - https://junyanz.github.io/CycleGAN/
+- https://keras.io/examples/generative/cyclegan/
 - https://machinelearningmastery.com/cyclegan-tutorial-with-keras/
 - https://github.com/eriklindernoren/Keras-GAN/blob/master/cyclegan/cyclegan.py
+- https://github.com/mronta/CycleGAN-in-Keras
