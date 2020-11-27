@@ -2,7 +2,7 @@
 Unpaired image-to-image translation with cycleGAN using Keras. (Translate an image from domain A to domain b and vice versa.)
 
 
-input  | 128 | 256 |  512
+input  | from 128x128 | from 256x256 |  from 512x512
 :-------------------------:|:-------------------------:|:-------------------------:|:-------------------------:
 <img src="readme_files/horse_2_zebra_1_in.jpg" width="200" />|<img src="readme_files/horse_2_zebra_1_128.jpg" width="200" />|<img src="readme_files/horse_2_zebra_1_256.jpg" width="200" />|<img src="readme_files/horse_2_zebra_1_512.jpg" width="200" />
 <img src="readme_files/horse_2_zebra_2_in.jpg" width="200" />|<img src="readme_files/horse_2_zebra_2_128.jpg" width="200" />|<img src="readme_files/horse_2_zebra_2_256.jpg" width="200" />|<img src="readme_files/horse_2_zebra_2_512.jpg" width="200" />
