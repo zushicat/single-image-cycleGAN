@@ -9,16 +9,16 @@ from tensorflow import keras
 from tensorflow_addons.layers import InstanceNormalization
 
 
-# MODEL = "../model/image_generator_A_B_model.h5"
-MODEL = "../model/image_generator_B_A_model.h5"
+MODEL = "../model/image_generator_A_B_model.h5"
+# MODEL = "../model/image_generator_B_A_model.h5"
 
-# FILE_INPUT_PATH = "/Users/karin/programming/data/image_pairs/tree2no_tree/val_A"
-FILE_INPUT_PATH = "/Users/karin/programming/data/image_pairs/tree2no_tree/val_B"
+FILE_INPUT_PATH = "/Users/karin/programming/data/image_pairs/tree2no_tree/val_A"
+# FILE_INPUT_PATH = "/Users/karin/programming/data/image_pairs/tree2no_tree/val_B"
 
 FILE_OUTPUT_PATH = "../test_predictions/model_predictions"
 
-# SAVE_DIR = "A_2_B"
-SAVE_DIR = "B_2_A"
+SAVE_DIR = "A_2_B"
+# SAVE_DIR = "B_2_A"
 
 IMAGE_SIZE = 512  # dimensions (squared) of incoming images /try 256, 512, ...
 USE_IMG_RATIO = 0.6715  # square img: 1.0  # <--- the ratio of image dimensions (in == out)
